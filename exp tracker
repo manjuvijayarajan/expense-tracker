@@ -1,0 +1,797 @@
+from tkinter import messagebox, ttk as ttk  # importing the ttk module from tkinter  
+from tkinter import messagebox as mb   # importing the messagebox module from tkinter  
+from tkcalendar import Calendar  # importing calender
+import datetime  # importing the datetime module  
+import sqlite3  # importing the sqlite3 module  
+from tkcalendar import DateEntry  # importing the DateEntry class from the tkcalendar module
+from tkinter import Tk, Button, Toplevel
+import matplotlib.pyplot as plt # importing the matplotlib
+from tkinter import *  
+from tkinter import END  # importing all the modules and classes from tkinter  
+import subprocess  # importing subprocess
+from tkinter import PhotoImage  # importing PhotoImage
+ 
+# --------------------- defining functions ---------------------  
+# function to list all the expenses  
+def listAllExpenses():
+    global dbconnector, data_table
+    data_table.delete(*data_table.get_children())
+
+    # Execute the SQL SELECT command to retrieve the data from the database table
+    all_data = dbconnector.execute('SELECT * FROM ExpenseTracker')
+
+    # Listing the data from the table
+    data = all_data.fetchall()
+
+    # Inserting the values iteratively in the tkinter data table
+    for index, val in enumerate(data, start=1):  # Start the serial number from 1
+        data_table.insert('', END, values=(index,) + val[1:])     
+  
+# function to view an expense information  
+def viewExpenseInfo():  
+    '''''This function will display the expense information in the data frame'''  
+  
+    # using some global variables   
+    global data_table  
+    global dateField, payee, description, amount, modeOfPayment  
+  
+    # return a message box displaying error if no row is selected from the table  
+    if not data_table.selection():  
+        mb.showerror('No expense selected', 'Please select an expense from the table to view its details')  
+  
+    # collecting the data from the selected row in dictionary format  
+    currentSelectedExpense = data_table.item(data_table.focus())  
+  
+    # defining a variable to store the values from the collected data in list  
+    val = currentSelectedExpense['values']  
+  
+    # retrieving the date of expenditure from the list  
+    expenditureDate = datetime.date(int(val[1][:4]), int(val[1][5:7]), int(val[1][8:]))  
+  
+    # setting the listed data in their respective entry fields  
+    dateField.set_date(expenditureDate) ; payee.set(val[2]) ; description.set(val[3]) ; amount.set(val[4]) ; modeOfPayment.set(val[5])  
+  
+# function to clear the entries from the entry fields  
+def clearFields():  
+    '''''This function will clear all the entries from the entry fields'''  
+  
+    # using some global variables  
+    global description, payee, amount, modeOfPayment, dateField, data_table  
+  
+    # defining a variable to store today's date  
+    todayDate = datetime.datetime.now().date()  
+  
+    # setting the values in entry fields back to initial  
+    description.set('') ; payee.set('') ; amount.set(0.0) ; modeOfPayment.set('Cash'), dateField.set_date(todayDate)  
+    # removing the specified item from the selection  
+    data_table.selection_remove(*data_table.selection())  
+  
+# function to delete the selected record  
+def removeExpense():  
+    '''''This function will remove the selected record from the table'''  
+  
+    # returning the message box displaying error if no row is selected  
+    if not data_table.selection():  
+        mb.showerror('No record selected!', 'Please select a record to delete!')  
+        return  
+  
+    # collecting the data from the selected row in dictionary format  
+    currentSelectedExpense = data_table.item(data_table.focus())  
+  
+    # defining a variable to store the values from the collected data in list  
+    valuesSelected = currentSelectedExpense['values']  
+  
+    # displaying a message box asking for confirmation  
+    confirmation = mb.askyesno('Are you sure?', f'Are you sure that you want to delete the record of {valuesSelected[2]}')  
+  
+    # if the user say YES, executing the SQL DELETE FROM command  
+    if confirmation:  
+        dbconnector.execute('DELETE FROM ExpenseTracker WHERE ID=%d' % valuesSelected[0])  
+        dbconnector.commit()  
+  
+        # calling the listAllExpenses() function  
+        listAllExpenses()  
+  
+        # returning the message box displaying the information  
+        mb.showinfo('Record deleted successfully!', 'The record you wanted to delete has been deleted successfully')  
+  
+# function to delete all the entries  
+def removeAllExpenses():  
+    '''''This function will remove all the entries from the table'''  
+      
+    # displaying a message box asking for confirmation  
+    confirmation = mb.askyesno('Are you sure?', 'Are you sure that you want to delete all the expense items from the database?', icon='warning')  
+  
+    # if the user say YES, deleting the entries from the table and executing the SQL DELETE FROM command to delete all the entries  
+    if confirmation:  
+        data_table.delete(*data_table.get_children())  
+  
+        dbconnector.execute('DELETE FROM ExpenseTracker')  
+        dbconnector.commit()  
+  
+        # calling the clearFields() function   
+        clearFields()  
+  
+        # calling the listAllExpenses() function  
+        listAllExpenses()  
+  
+        # returning the message box displaying the information  
+        mb.showinfo('All Expenses deleted', 'All the expenses were successfully deleted')  
+    else:  
+        # returning the message box, if the operation is aborted  
+        mb.showinfo('Ok then', 'The task was aborted and no expense was deleted!')  
+# function to add expenses
+def addAnotherExpense():
+    global dateField, payee, description, amount, modeOfPayment
+    global dbconnector
+
+    if not dateField.get() or not payee.get() or not description.get() or not amount.get() or not modeOfPayment.get():
+        mb.showerror('Fields empty!', "Please fill all the missing fields before pressing the add button!")
+    else:
+        # Retrieve the maximum ID currently present in the database
+        max_id_query = dbconnector.execute('SELECT MAX(ID) FROM ExpenseTracker')
+        max_id = max_id_query.fetchone()[0]  # Fetch the maximum ID
+        new_id = max_id + 1 if max_id else 1  # Increment the maximum ID by 1 to determine the new ID
+        # Execute the SQL INSERT INTO command with the new ID
+        dbcursor.execute(
+            'INSERT INTO ExpenseTracker (ID, Date, Payee, Description, Amount, ModeOfPayment) VALUES (?, ?, ?, ?, ?, ?)',
+            (new_id, dateField.get_date(), payee.get(), description.get(), amount.get(), modeOfPayment.get())
+        )
+        dbconnector.commit()
+
+        clearFields()
+        listAllExpenses()
+        mb.showinfo('Expense added', 'The expense whose details you just entered has been added to the database')
+  
+# function to edit the details of an expense  
+def editExpense():  
+    '''''This function will allow user to edit the details of the selected expense'''  
+  
+    # using some global variables  
+    global data_table  
+  
+    # defining a nested to update the details of the selected expense  
+    def editExistingExpense():  
+        '''''This function will update the details of the selected expense in the database and table'''  
+  
+        # using some global variables  
+        global dateField, amount, description, payee, modeOfPayment  
+        global dbconnector, data_table  
+          
+        # collecting the data from the selected row in dictionary format  
+        currentSelectedExpense = data_table.item(data_table.focus())  
+          
+        # defining a variable to store the values from the collected data in list  
+        content = currentSelectedExpense['values']  
+          
+        # executing the SQL UPDATE command to update the record in database table  
+        dbconnector.execute(  
+            'UPDATE ExpenseTracker SET Date = ?, Payee = ?, Description = ?, Amount = ?, ModeOfPayment = ? WHERE ID = ?',  
+            (dateField.get_date(), payee.get(), description.get(), amount.get(), modeOfPayment.get(), content[0])  
+        )  
+        dbconnector.commit()  
+          
+        # calling the clearFields() function  
+        clearFields()  
+  
+        # calling the listAllExpenses() function  
+        listAllExpenses()  
+          
+        # returning a message box displaying the message  
+        mb.showinfo('Data edited', 'We have updated the data and stored in the database as you wanted')  
+        # destroying the edit button   
+        editSelectedButton.destroy()  
+          
+    # returning a message box displaying error if no record is selected  
+    if not data_table.selection():  
+        mb.showerror('No expense selected!', 'You have not selected any expense in the table for us to edit; please do that!')  
+        return  
+          
+    # calling the viewExpenseInfo() method  
+    viewExpenseInfo()  
+  
+    # adding the Edit button to edit the selected record  
+    editSelectedButton = Button(  
+        frameL3,  
+        text = "Edit Expense",  
+        font = ("Bahnschrift Condensed", "13"),  
+        width = 30,  
+        bg = "#656565",  
+        fg = "#FFFAF0",  
+        relief = GROOVE,  
+        activebackground = "#656565",  
+        activeforeground = "#FFFAF0",  
+        command = editExistingExpense  
+        )  
+  
+    # using the grid() method to set the position of the above button on the main window screen  
+    editSelectedButton.grid(row = 0, column = 0, sticky = W, padx = 50, pady = 10)  
+
+  
+# function to display the details of selected expense into words  
+def selectedExpenseToWords():  
+    '''''This function will display the details of the selected expense from the table into words'''  
+  
+    # using some global variables  
+    global data_table  
+  
+    # returning a message box displaying error, if no record is selected from the table  
+    if not data_table.selection():  
+        mb.showerror('No expense selected!', 'Please select an expense from the table for us to read')  
+        return  
+          
+    # collecting the data from the selected row in dictionary format  
+    currentSelectedExpense = data_table.item(data_table.focus())  
+  
+    # defining a variable to store the values from the collected data in list  
+    val = currentSelectedExpense['values']  
+  
+    # defining the message to be displayed in the message box      
+    msg = f'Your expense can be read like: \n"You paid {val[4]} to {val[2]} for {val[3]} on {val[1]} via {val[5]}"'  
+      
+    # returning the message box displaying the message  
+    mb.showinfo('Here\'s how to read your expense', msg)  
+  
+# function to display the expense details into words before adding it to the table  
+def expenseToWordsBeforeAdding():  
+    '''''This function will display the details of the expense into words before adding it to the table'''  
+  
+    # using some global variables  
+    global dateField, description, amount, payee, modeOfPayment  
+      
+    # if any of the field is empty, return the message box displaying error  
+    if not dateField.get() or not payee.get() or not description.get() or not amount.get() or not modeOfPayment.get():  
+        mb.showerror('Incomplete data', 'The data is incomplete, meaning fill all the fields first!')  
+    else:  
+        # defining the message to be displayed in the message box  
+        msg = f'Your expense can be read like: \n"You paid {amount.get()} to {payee.get()} for {description.get()} on {dateField.get_date()} via {modeOfPayment.get()}"'  
+      
+    # displaying a message box asking for confirmation  
+    addQuestion = mb.askyesno('Read your record like: ', f'{msg}\n\nShould I add it to the database?')  
+  
+    # if the user say YES, calling the addAnotherExpense() function    
+    if addQuestion:  
+        addAnotherExpense()  
+    else:  
+        # returning a message box displaying information  
+        mb.showinfo('Ok', 'Please take your time to add this record')  
+# function to search expenses through description or payee
+def searchExpenses():
+    query = search_query.get()
+    if not query:
+        mb.showerror('Empty Query', 'Please enter a search query')
+        return
+
+    # Execute SQL SELECT command with a WHERE clause based on the search query
+    sql_query = "SELECT * FROM ExpenseTracker WHERE Payee LIKE ? OR Description LIKE ? OR Amount LIKE ?"
+    params = ('%' + query + '%', '%' + query + '%', '%' + query + '%')
+    search_results = dbconnector.execute(sql_query, params).fetchall()
+
+    # Clear the table before displaying search results
+    data_table.delete(*data_table.get_children())
+
+    # Insert search results into the table
+    for index, val in enumerate(search_results, start=1):
+        data_table.insert('', END, values=(index,) + val[1:])
+# Function to show all expenses
+def showAllExpenses():
+    # Clear existing data in the table
+    data_table.delete(*data_table.get_children())
+    # Retrieve all expenses from the database
+    dbcursor.execute("SELECT * FROM ExpenseTracker")
+    all_expenses = dbcursor.fetchall()
+    # Insert all expenses into the table
+    for index, val in enumerate(all_expenses, start=1):
+        data_table.insert('', END, values=(index,) + val[1:]) 
+# Function to open the calculator
+def open_calculator():
+    # Open calculator using subprocess
+    subprocess.Popen('calc.exe')
+# function to splitexpense 
+def split_expense_window():
+    new_window = Toplevel(main_win)
+    new_window.title("Split Expense")
+    new_window.resizable(0, 0)
+    new_window.config(bg ="#bdbdbd") 
+
+    total_amount_label =Label(new_window, text="Total Amount:",bg ="#bdbdbd")
+    total_amount_label.pack(side=TOP, padx=5, pady=5)
+    total_amount_entry = Entry(new_window,bg="#FFFFFF")
+    total_amount_entry.pack(side=TOP, padx=5, pady=5)
+
+    individuals_label = Label(new_window, text="Individuals Involved (comma-separated):",bg ="#bdbdbd")
+    individuals_label.pack(side=TOP, padx=5, pady=5)
+    individuals_entry = Entry(new_window,bg="#FFFFFF")
+    individuals_entry.pack(side=TOP, padx=5, pady=5)
+
+    split_method_label = Label(new_window, text="Splitting Method:",bg ="#bdbdbd")
+    split_method_label.pack(side=TOP, padx=5, pady=5)
+    split_method_combobox = ttk.Combobox(new_window, values=["Equal", "Unequal"])
+    split_method_combobox.pack(side=TOP, padx=5, pady=5)
+    split_method_combobox.current(0)  # Set default value to "Equal"
+
+    percentages_label = Label(new_window, text="Percentage for Each Individual (comma-separated, only for Unequal splitting):",bg ="#bdbdbd")
+    percentages_label.pack(side=TOP, padx=5, pady=5)
+    percentages_entry = Entry(new_window,bg="#FFFFFF")
+    percentages_entry.pack(side=TOP, padx=5, pady=5)
+
+    result_label = Label(new_window, text="",bg ="#bdbdbd")
+    result_label.pack(side=TOP, padx=5, pady=5)
+
+    split_button =Button(new_window, text="Split Expense", command=lambda: split_expense(total_amount_entry, individuals_entry, split_method_combobox.get(), percentages_entry, result_label))
+    split_button.pack(side=TOP, padx=5, pady=5)
+
+def split_expense(total_amount_entry, individuals_entry, split_method, percentages_entry, result_label):
+    total_amount = float(total_amount_entry.get())
+    individuals = individuals_entry.get().split(",")
+    if split_method == "Equal":
+        num_individuals = len(individuals)
+        split_amount = total_amount / num_individuals
+        result_label.config(text="")
+        result_label.config(text="Expense Split (Equal):")
+
+        for individual in individuals:
+            result_label.config(text=result_label.cget("text") + f"\n{individual}: {split_amount:.2f}")
+    
+    elif split_method == "Unequal":
+        percentages = [float(p.strip()) for p in percentages_entry.get().split(",")]
+
+        if len(individuals) != len(percentages):
+            result_label.config(text="Error: Number of individuals and percentages must match.")
+            return
+
+        total_percentage = sum(percentages)
+        if total_percentage != 100:
+            result_label.config(text="Error: Total percentage must equal 100.")
+            return
+
+        result_label.config(text="")
+        result_label.config(text="Expense Split (Unequal):")
+        for individual, percentage in zip(individuals, percentages):
+            split_amount = (percentage / 100) * total_amount
+            result_label.config(text=result_label.cget("text") + f"\n{individual}: {split_amount:.2f}")
+# main function  
+if __name__ == "__main__":  
+  
+    # connecting to the Database  
+    dbconnector = sqlite3.connect("Expense_Tracker.db")  
+    dbcursor = dbconnector.cursor()  
+  
+    # specifying the function to execute whenever the application runs  
+    dbconnector.execute(  
+        'CREATE TABLE IF NOT EXISTS ExpenseTracker (ID INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, Date DATETIME, Payee TEXT, Description TEXT, Amount FLOAT, ModeOfPayment TEXT)'  
+    )  
+    # committing the above command  
+    dbconnector.commit()  
+  
+    # creating the main window of the application  
+    # creating an instance of the Tk() class  
+    main_win = Tk()  
+    # setting the title of the application  
+    main_win.title("EXPENSE TRACKER")  
+    # setting the size and position of the window  
+    main_win.geometry("1415x650+400+100")  
+    # disabling the resizable option for better UI  
+    main_win.resizable(0, 0)  
+    # configuring the background color to #FFFAF0  
+    main_win.config(bg ="#242424")  
+    # setting the icon of the application  
+    frameLeft = Frame(main_win, bg ="#242424")  
+    frameRight = Frame(main_win, bg ="#242424")  
+    frameL1 = Frame(frameLeft, bg = "#bdbdbd")  
+    frameL2 = Frame(frameLeft, bg = "#bdbdbd")  
+    frameL3 = Frame(frameLeft, bg = "#bdbdbd")  
+    frameR1 = Frame(frameRight, bg = "#242424")  
+    frameR2 = Frame(frameRight, bg = "#242424")  
+  
+    # using the pack() method to set the position of the above frames  
+    frameLeft.pack(side=LEFT, fill = "both")  
+    frameRight.pack(side = RIGHT, fill = "both", expand = True)  
+    frameL1.pack(fill = "both")  
+    frameL2.pack(fill = "both")  
+    frameL3.pack(fill = "both")  
+    frameR1.pack(fill = "both")  
+    frameR2.pack(fill = "both", expand = True)  
+    frameLeft.pack(side=LEFT, fill = "both")  
+    frameRight.pack(side = RIGHT, fill = "both", expand = True)  
+    frameL1.pack(fill = "both")  
+    frameL2.pack(fill = "both")  
+    frameL3.pack(fill = "both")  
+    frameR1.pack(fill = "both")  
+    frameR2.pack(fill = "both", expand = True)  
+    # ---------------- Adding widgets to the frameL1 frame ----------------  
+   
+    # adding the label to display the heading  
+    headingLabel = Label(  
+        frameL1,  
+        text = "EXPENSE TRACKER",  
+        font = ("Bahnschrift Condensed", "25"),  
+        width = 20,  
+        bg = "#939393",  
+        fg = "#FFFAF0"  
+        )  
+    # adding the label to display the subheading  
+    subheadingLabel = Label(  
+        frameL1,  
+        text = "Data Entry Frame",  
+        font = ("Bahnschrift Condensed", "15"),  
+        width = 20,  
+        bg = "#242424",  
+        fg = "#FFFAF0"  
+        )  
+    # using the pack() method to set the position of the above labels  
+    headingLabel.pack(fill = "both")  
+    subheadingLabel.pack(fill = "both")  
+  
+    # ---------------- Adding widgets to the frameL2 frame ----------------  
+    # creating some labels to ask user to enter the required data  
+    # date label  
+    dateLabel = Label(  
+        frameL2,  
+        text = "Date:",  
+        font = ("consolas", "11", "bold"),  
+        bg = "#bdbdbd",  
+        fg = "#000000"  
+        )  
+    # description label  
+    descriptionLabel = Label(  
+        frameL2,  
+        text = "Description:",  
+        font = ("consolas", "11", "bold"),  
+        bg = "#bdbdbd",  
+        fg = "#000000"  
+        )  
+    # amount label  
+    amountLabel = Label(  
+        frameL2,  
+        text = "Amount:",  
+        font = ("consolas", "11", "bold"),  
+        bg = "#bdbdbd",  
+        fg = "#000000"  
+        )  
+    # payee label  
+    payeeLabel = Label(  
+        frameL2,  
+        text = "Payee:",  
+        font = ("consolas", "11", "bold"),  
+        bg = "#bdbdbd",  
+        fg = "#000000"  
+        )  
+    # mode of payment label  
+    modeLabel = Label(  
+        frameL2,  
+        text = "Mode of \nPayment:",  
+        font = ("consolas", "11", "bold"),  
+        bg = "#bdbdbd",  
+        fg = "#000000"  
+        )  
+    # using the grid() method to set the position of the above labels in the grid format  
+    dateLabel.grid(row = 0, column = 0, sticky = W, padx = 10, pady = 10)      
+    descriptionLabel.grid(row = 1, column = 0, sticky = W, padx = 10, pady = 10)      
+    amountLabel.grid(row = 2, column = 0, sticky = W, padx = 10, pady = 10)      
+    payeeLabel.grid(row = 3, column = 0, sticky = W, padx = 10, pady = 10)      
+    modeLabel.grid(row = 4, column = 0, sticky = W, padx = 10, pady = 10)      
+    # instantiating the StringVar() class to retrieve the data in the string format from the user  
+    description = StringVar()  
+    payee = StringVar()  
+    modeOfPayment = StringVar(value = "Cash")  
+    # instantiating the DoubleVar() class to retrieve the amount detail in double datatype  
+    amount = DoubleVar()  
+    # creating a drop-down calendar for the user to enter the date  
+    dateField = DateEntry(  
+        frameL2,  
+        date = datetime.datetime.now().date(),  
+        font = ("consolas", "11"),  
+        relief = GROOVE  
+        )  
+    # creating entry fields to enter the labelled data  
+    # field to enter description  
+    descriptionField = Entry(  
+        frameL2,  
+        text = description,  
+        width = 20,  
+        font = ("consolas", "11"),  
+        bg = "#FFFFFF",  
+        fg = "#000000",  
+        relief = GROOVE  
+        )  
+    # field to enter the amount  
+    amountField = Entry(  
+        frameL2,  
+        text = amount,  
+        width = 20,  
+        font = ("consolas", "11"),  
+        bg = "#FFFFFF",  
+        fg = "#000000",  
+        relief = GROOVE  
+        )  
+    # field to enter payee information  
+    payeeField = Entry(  
+        frameL2,  
+        text = payee,  
+        width = 20,  
+        font = ("consolas", "11"),  
+        bg = "#FFFFFF",  
+        fg = "#000000",  
+        relief = GROOVE  
+        )  
+    # creating a drop-down menu to enter the mode of payment  
+    modeField = OptionMenu(  
+        frameL2,  
+        modeOfPayment,  
+        *['Cash', 'Cheque', 'Credit Card', 'Debit Card', 'UPI', 'Paytm', 'Google Pay', 'PhonePe', 'Razorpay']  
+        )  
+    # using the config() method to configure the width, font style, and background color of the option menu  
+    modeField.config(  
+        width = 15,  
+        font = ("consolas", "10"),  
+        relief = GROOVE,  
+        bg = "#FFFFFF"  
+        )  
+    # using the grid() method to set the position of the above widgets in the grid format  
+    dateField.grid(row = 0, column = 1, sticky = W, padx = 10, pady = 10)  
+    descriptionField.grid(row = 1, column = 1, sticky = W, padx = 10, pady = 10)  
+    amountField.grid(row = 2, column = 1, sticky = W, padx = 10, pady = 10)  
+    payeeField.grid(row = 3, column = 1, sticky = W, padx = 10, pady = 10)  
+    modeField.grid(row = 4, column = 1, sticky = W, padx = 10, pady = 10)  
+  
+    # ---------------- Adding widgets to the frameL3 frame ----------------  
+    # creating buttons to manipulate data  
+    # insert button  
+    insertButton = Button(  
+        frameL3,  
+        text = "Add Expense",  
+        font = ("Bahnschrift Condensed", "13"),  
+        width = 30,  
+        bg = "#656565",  
+        fg = "#FFFAF0",  
+        relief = GROOVE,  
+        activebackground = "#656565",  
+        activeforeground = "#FFFAF0",  
+        command = addAnotherExpense  
+        )  
+    # convert button  
+    convertButton = Button(  
+        frameL3,  
+        text = "Convert to Text before Adding",  
+        font = ("Bahnschrift Condensed", "13"),  
+        width = 30,  
+        bg = "#656565",  
+        fg = "#FFFAF0",  
+        relief = GROOVE,  
+        activebackground = "#656565",  
+        activeforeground = "#FFFAF0",  
+        command = expenseToWordsBeforeAdding  
+        )  
+    # reset button  
+    resetButton = Button(  
+        frameL3,  
+        text = "Reset the fields",  
+        font = ("Bahnschrift Condensed", "13"),  
+        width = 30,  
+        bg = "#656565",  
+        fg = "#FFFAF0",  
+        relief = GROOVE,  
+        activebackground = "#656565",  
+        activeforeground = "#FFFAF0",  
+        command = clearFields  
+        )  
+    # using the grid() method to set the position of the above buttons  
+    insertButton.grid(row = 0, column = 0, sticky = W, padx = 50, pady = 10)  
+    convertButton.grid(row = 1, column = 0, sticky = W, padx = 50, pady = 10)  
+    resetButton.grid(row = 2, column = 0, sticky = W, padx = 50, pady = 10)  
+
+    # ---------------- Adding widgets to the frameR1 frame ----------------  
+    # creating buttons to manipulate data  
+    # view button  
+    viewButton = Button(  
+        frameR1,  
+        text = "View Selected Expense\'s Details",  
+        font = ("Bahnschrift Condensed", "13"),  
+        width = 35,  
+        bg = "#656565",  
+        fg = "#FFFAF0",  
+        relief = GROOVE,  
+        activebackground = "#656565",  
+        activeforeground = "#FFFAF0",  
+        command = viewExpenseInfo  
+        )  
+    # edit button  
+    editButton = Button(  
+        frameR1,  
+        text = "Edit Selected Expense",  
+        font = ("Bahnschrift Condensed", "13"),  
+        width = 35,  
+        bg = "#656565",  
+        fg = "#FFFAF0",  
+        relief = GROOVE,  
+        activebackground = "#656565",  
+        activeforeground = "#FFFAF0",  
+        command = editExpense  
+        )  
+    
+    # delete button  
+    deleteButton = Button(  
+        frameR1,  
+        text = "Delete Selected Expense",  
+        font = ("Bahnschrift Condensed", "13"),  
+        width = 35,  
+        bg = "#656565",  
+        fg = "#FFFAF0",  
+        relief = GROOVE,  
+        activebackground = "#656565",  
+        activeforeground = "#FFFAF0",  
+        command = removeExpense  
+        )  
+    # delete all button  
+    deleteAllButton = Button(  
+        frameR1,  
+        text = "Delete All Expense",  
+        font = ("Bahnschrift Condensed", "13"),  
+        width = 35,  
+        bg = "#656565",  
+        fg = "#FFFAF0",  
+        relief = GROOVE,  
+        activebackground = "#656565",  
+        activeforeground = "#FFFAF0",  
+        command = removeAllExpenses  
+        ) 
+    # Create a button to show all expenses 
+    showAllButton = Button(
+    frameR1,
+    text="Show All Expenses",
+    font=("Bahnschrift Condensed", "13"),
+    width=35,
+    relief=GROOVE,
+    bg="#656565",
+    fg="#FFFAF0",
+    activebackground="#656565",
+    activeforeground="#FFFAF0",
+    command=showAllExpenses
+)
+    # Add a button to trigger the search function
+    search_icon = PhotoImage(file=r"C:\Users\User\Downloads\search.png")
+    search_button = Button(
+    frameR1,
+    width=20,
+    image=search_icon,
+    command=searchExpenses
+)
+    # creating search entry 
+    search_query = StringVar()
+    search_entry = Entry(
+    frameR1,
+    textvariable=search_query,
+    font=("consolas", "14"),
+    bg="#FFFFFF",
+    fg="#000000",
+    relief=GROOVE,
+    width=25,
+)  
+    # Create a button to open the calculator
+    calculator_button = Button(frameR1, text="Open Calculator",font=("Bahnschrift Condensed", "13"),
+    width=35,
+    relief=GROOVE,
+    bg="#656565",
+    fg="#FFFAF0",
+    activebackground = "#656565",
+    activeforeground = "#FFFAF0",
+    command=open_calculator)
+    
+    expenseSplitterButton = Button(   
+       frameR1,     
+        text = "Expense Splitter",  
+        font = ("Bahnschrift Condensed", "13"),  
+        width = 35,  
+        bg="#656565",
+        fg="#FFFAF0",
+        relief = GROOVE,  
+       activebackground = "#656565", 
+       activeforeground = "#FFFAF0",
+        command=split_expense_window
+)
+    # using the grid() method to set the position of the above buttons  
+    viewButton.grid(row=0, column=0, sticky=W, padx=10, pady=10)
+    editButton.grid(row=0, column=1, sticky=W, padx=10, pady=10)
+    deleteButton.grid(row=0, column=3, sticky=W, padx=10, pady=10)
+    showAllButton.grid(row=1, column=0, sticky=W, padx=10, pady=10)
+    expenseSplitterButton.grid(row=1, column=1, padx=10, pady=10)
+    calculator_button.grid(row=1, column=3, padx=10, pady=10)# Adding the calculator button
+    # Positioning the search entry and button
+    search_entry.grid(row=2, column=0, padx=10, pady=10)
+    search_button.grid(row=2, column=1, padx=10, pady=10, sticky="w")
+    deleteAllButton.grid(row=0, column=2, sticky=W, padx=10, pady=10)
+    # ---------------- Adding widgets to the frameR2 frame ----------------  
+    # Create the Treeview widget with the configured style
+    style = ttk.Style() # Creating a style object
+    style.configure("mystyle.Treeview", background=" #E5BEEC")
+    style.configure("mystyle.Treeview.Heading", background="#E5BEEC")# Configuring the style for the heading background
+    # Creating the Treeview widget with the configured style
+    data_table = ttk.Treeview(
+       frameR2,
+       style="mystyle.Treeview",
+       selectmode=BROWSE,
+       columns=('ID', 'Date', 'Payee', 'Description', 'Amount', 'Mode of Payment')
+)
+    # creating a horizontal scrollbar to the table  
+    Xaxis_Scrollbar = Scrollbar(  
+        data_table,  
+        orient = HORIZONTAL,
+        command = data_table.xview  
+        )  
+    # creating a vertical scrollbar to the table  
+    Yaxis_Scrollbar = Scrollbar(  
+        data_table,  
+        orient = VERTICAL,  
+        command = data_table.yview  
+        )   
+    # using the pack() method to set the position of the scrollbars  
+    Xaxis_Scrollbar.pack(side = BOTTOM, fill = X)  
+    Yaxis_Scrollbar.pack(side = RIGHT, fill = Y)   
+    # configuring the horizontal and vertical scrollbars on the table  
+    data_table.config(yscrollcommand = Yaxis_Scrollbar.set, xscrollcommand = Xaxis_Scrollbar.set)  
+    # adding different headings to the table  
+    style = ttk.Style()
+    style.theme_use("clam")  # You can choose any available theme
+    # Configure the style for the heading background
+    style.configure("Treeview.Heading", background="#747474")  # Example color: white
+    # Creating the Treeview widget
+    data_table = ttk.Treeview(
+       frameR2,
+       selectmode=BROWSE,
+       columns=('ID', 'Date', 'Payee', 'Description', 'Amount', 'Mode of Payment')
+)
+    data_table.heading('ID', text = 'S No.', anchor = CENTER)  
+    data_table.heading('Date', text = 'Date', anchor = CENTER)  
+    data_table.heading('Payee', text = 'Payee', anchor = CENTER)  
+    data_table.heading('Description', text = 'Description', anchor = CENTER)  
+    data_table.heading('Amount', text = 'Amount', anchor = CENTER)  
+    data_table.heading('Mode of Payment', text = 'Mode of Payment', anchor = CENTER)  
+    # adding different columns to the table  
+    data_table.column('#0', width = 0, stretch = NO)  
+    data_table.column('#1', width = 50, stretch = NO)  
+    data_table.column('#2', width = 95, stretch = NO)  
+    data_table.column('#3', width = 150, stretch = NO)  
+    data_table.column('#4', width = 450, stretch = NO)  
+    data_table.column('#5', width = 135, stretch = NO)  
+    data_table.column('#6', width = 140, stretch = NO)  
+    # using the place() method to set the position of the table on the main window screen  
+    data_table.place(relx = 0, y = 0, relheight = 1, relwidth = 1)  
+# function to plot monthly expenses
+def plotMonthlyExpenses():
+    # Connect to the SQLite database
+    conn = sqlite3.connect("Expense_Tracker.db")
+    cursor = conn.cursor()
+    # Execute SQL query to retrieve monthly expenses
+    cursor.execute("SELECT strftime('%Y-%m', Date) AS Month, SUM(Amount) AS TotalExpense FROM ExpenseTracker GROUP BY Month")
+    monthly_expenses = cursor.fetchall()
+    # Close the database connection
+    conn.close()
+    # Extracting months and expenses from the result
+    months = [record[0] for record in monthly_expenses]
+    expenses = [record[1] for record in monthly_expenses]
+    # Plotting the bar graph  33r
+    plt.figure(figsize=(10, 6))
+    plt.gca().set_facecolor('#bdbdbd')
+    plt.bar(months, expenses, color='#282828')
+    plt.xlabel('Month')
+    plt.ylabel('Total Expenses')
+    plt.title('Monthly Expenses')
+    plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
+    plt.tight_layout()  # Adjust layout to prevent clipping of labels
+    plt.show()
+# Adding a button to trigger the plotting function
+plotButton = Button(
+    frameR1,
+    text="Show Monthly Expenses",
+    font=("Bahnschrift Condensed", "13"),
+    width=35,
+    relief=GROOVE,
+    bg="#656565",
+    fg="#FFFAF0",
+    activebackground = "#656565",
+    activeforeground = "#FFFAF0",
+    command=plotMonthlyExpenses
+)
+plotButton.grid(row=1, column=2, sticky=W, padx=10, pady=10)
+main_win.mainloop()
