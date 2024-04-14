@@ -67,22 +67,21 @@ def clearFields():
     data_table.selection_remove(*data_table.selection())  
   
 # function to delete the selected record  
-def removeExpense():  
+def removeExpense():
     '''''This function will remove the selected record from the table'''  
-  
-    # returning the message box displaying error if no row is selected  
+    # returning a message box displaying error if no row is selected  
     if not data_table.selection():  
         mb.showerror('No record selected!', 'Please select a record to delete!')  
         return  
   
     # collecting the data from the selected row in dictionary format  
-    currentSelectedExpense = data_table.item(data_table.focus())  
+    currentSelectedExpense = data_table.item(data_table.selection()[0])  
   
     # defining a variable to store the values from the collected data in list  
     valuesSelected = currentSelectedExpense['values']  
   
     # displaying a message box asking for confirmation  
-    confirmation = mb.askyesno('Are you sure?', f'Are you sure that you want to delete the record of {valuesSelected[2]}')  
+    confirmation = mb.askyesno('Are you sure?', f'Are you sure that you want to delete the record of {valuesSelected[1]}')  
   
     # if the user say YES, executing the SQL DELETE FROM command  
     if confirmation:  
@@ -94,7 +93,6 @@ def removeExpense():
   
         # returning the message box displaying the information  
         mb.showinfo('Record deleted successfully!', 'The record you wanted to delete has been deleted successfully')  
-  
 # function to delete all the entries  
 def removeAllExpenses():  
     '''''This function will remove all the entries from the table'''  
